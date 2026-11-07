@@ -1,0 +1,49 @@
+name: Unsigned iPhone IPA
+on:
+  push:
+    branches: [main]
+    paths: ['ios/**', 'IDV-source.zip', '.github/workflows/ios-unsigned.yml', 'scripts/build-unsigned.sh']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: unsigned-ipa-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract source package
+        run: |
+          if [ -f IDV-source.zip ]; then unzip -qo IDV-source.zip; fi
+      - name: Select Xcode
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          xcodebuild -version
+      - name: Test core
+        run: swift test --package-path ios
+      - name: Generate Xcode project
+        run: |
+          brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
+          xcodegen generate --spec ios/project.yml
+      - name: Build unsigned IPA
+        run: bash scripts/build-unsigned.sh
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: IDV-unsigned-${{ github.run_number }}
+          path: dist/IDV-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: IDV-build-log-${{ github.run_number }}
+          path: |
+            dist/build.log
+            dist/chat-layout-qa.zip
+          if-no-files-found: ignore
+          retention-days: 7
